@@ -591,6 +591,9 @@ function buildCard(f, route, photo) {
   const isNow    = f.eta <= VISIBLE_EARLY_S;
   const badgeText  = isNow ? '👁 ARA' : `en ${fmtEta(f.eta)}`;
   const badgeClass = isNow ? 'badge visible-now' : 'badge eta';
+  // data-eta + data-ts lets the 1-second ticker count down live
+  const badgeData  = isNow ? '' : ` data-eta="${f.eta.toFixed(1)}" data-ts="${Date.now()}"`;
+  const badgeId    = `badge-${f.icao24}`;
 
   const altFt = f.baroAlt != null ? `${Math.round(f.baroAlt / 100) * 100}ft` : '—';
   const speed  = f.velocity != null ? `${Math.round(f.velocity)}kt` : '—';
@@ -632,7 +635,7 @@ function buildCard(f, route, photo) {
       <div class="card-top-info">
         ${routeHtml}
         <div class="airline-name">${subline}</div>
-        <span class="${badgeClass}">${badgeText}</span>
+        <span class="${badgeClass}" id="${badgeId}"${badgeData}>${badgeText}</span>
       </div>
       ${photoHtml}
     </div>
@@ -756,6 +759,23 @@ function updateCountdown() {
   el.textContent = rem > 0 ? `Actualització en ${rem}s` : '';
 }
 setInterval(updateCountdown, 1000);
+
+// ── Live ETA countdown on cards (ticks every second) ─────────────
+function tickEtaBadges() {
+  document.querySelectorAll('[data-eta]').forEach(el => {
+    const baseEta = parseFloat(el.dataset.eta);
+    const ts      = parseFloat(el.dataset.ts);
+    const remaining = baseEta - (Date.now() - ts) / 1000;
+    if (remaining <= VISIBLE_EARLY_S) {
+      el.textContent = '👁 ARA';
+      el.className = 'badge visible-now';
+      el.removeAttribute('data-eta');   // stop ticking
+    } else {
+      el.textContent = `en ${fmtEta(remaining)}`;
+    }
+  });
+}
+setInterval(tickEtaBadges, 1000);
 
 refresh();
 setInterval(refresh, REFRESH_MS);
