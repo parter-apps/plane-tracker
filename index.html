@@ -396,13 +396,18 @@ function openFR24(url) {
 }
 
 // ── Config ────────────────────────────────────────────────────────
-const ZONE         = { lat: 41.32274268047485, lon: 2.1520313218071245 };
+const ZONE          = { lat: 41.32274268047485, lon: 2.1520313218071245 };
 const ZONE_RADIUS_M = 800;
-const BCN          = { lat: 41.2974, lon: 2.0833 };
-const MAX_ALT_FT   = 11500;
-const MAX_ETA_S    = 300;       // 5 min
-const REFRESH_MS   = 8000;
-const FR24_BASE    = 'https://www.flightradar24.com/';
+const BCN           = { lat: 41.2974, lon: 2.0833 };
+const MAX_ALT_FT    = 11500;
+const MAX_ETA_S     = 300;        // 5 min upcoming window
+const REFRESH_MS    = 8000;
+const FR24_BASE     = 'https://www.flightradar24.com/';
+
+// Appear VISIBLE_EARLY_S before entering zone; vanish VISIBLE_EARLY_S before exiting
+const VISIBLE_EARLY_S = 2;
+// Pre-computed: great-circle distance from observer zone to BCN threshold (m)
+// Used to detect when a plane has flown past the zone toward the runway.
 
 // ── Airline lookup ────────────────────────────────────────────────
 const AIRLINES = {
@@ -582,7 +587,7 @@ async function fetchFlight(icao24, callsign) {
 // ── Card builder ──────────────────────────────────────────────────
 function buildCard(f, route, photo) {
   const fr24url  = `${FR24_BASE}${f.callsign}`;
-  const isNow    = f.distM <= ZONE_RADIUS_M;
+  const isNow    = f.eta <= VISIBLE_EARLY_S;
   const badgeText  = isNow ? '👁 ARA' : `en ${fmtEta(f.eta)}`;
   const badgeClass = isNow ? 'badge visible-now' : 'badge eta';
 
@@ -680,19 +685,21 @@ async function refresh() {
       return d <= QUERY_M;
     });
 
-    // Compute ETA to zone for each
+    // Pre-compute zone→BCN distance once (used for exit detection)
+    const ZONE_TO_BCN_M = haversineM(ZONE.lat, ZONE.lon, BCN.lat, BCN.lon);
+
+    // Compute ETA to zone and ground speed (m/s) for each
     const withEta = candidates.map(f => {
-      const distM     = haversineM(f.lat, f.lon, ZONE.lat, ZONE.lon);
-      const gsMs      = (f.velocity || 120) * 0.514444;
+      const distM  = haversineM(f.lat, f.lon, ZONE.lat, ZONE.lon);
+      const gsMs   = (f.velocity || 120) * 0.514444;
       const remaining = Math.max(0, distM - ZONE_RADIUS_M);
-      const eta       = remaining / gsMs;
-      return { ...f, distM, eta };
+      const eta    = remaining / gsMs;
+      return { ...f, distM, eta, gsMs };
     });
 
-    // Keep only descending (or in zone) within 5-min window
+    // Keep descending planes within 5-min window (plus early-appear buffer)
     const approaching = withEta.filter(f =>
-      f.distM <= ZONE_RADIUS_M ||
-      (f.eta <= MAX_ETA_S && (f.vertRate == null || f.vertRate < 300))
+      f.eta <= MAX_ETA_S && (f.vertRate == null || f.vertRate < 300)
     ).sort((a, b) => a.eta - b.eta);
 
     // Fetch route + photo in parallel
@@ -707,8 +714,23 @@ async function refresh() {
       photoMap.set(f.icao24, photo);
     }));
 
-    const visible  = approaching.filter(f => f.distM <= ZONE_RADIUS_M);
-    const upcoming = approaching.filter(f => f.distM > ZONE_RADIUS_M);
+    // ── Visible window with ±2s adjustment ───────────────────────
+    // Appear early:   eta <= VISIBLE_EARLY_S  (plane not yet in zone but close)
+    // Disappear early: once the plane is VISIBLE_EARLY_S * speed past the zone
+    //                  toward BCN it leaves the visible list.
+    const isVisible = f => {
+      if (f.eta > VISIBLE_EARLY_S) return false;   // still too far
+      // Detect planes that have passed the zone heading to runway:
+      // distToBCN < ZONE_TO_BCN_M means plane is closer to BCN than our zone.
+      // We disappear it when it is more than (gsMs * VISIBLE_EARLY_S) past the zone.
+      const distToBCN = haversineM(f.lat, f.lon, BCN.lat, BCN.lon);
+      const msPastZone = ZONE_TO_BCN_M - distToBCN;   // positive = past the zone
+      if (msPastZone > f.gsMs * VISIBLE_EARLY_S) return false;
+      return true;
+    };
+
+    const visible  = approaching.filter(f =>  isVisible(f));
+    const upcoming = approaching.filter(f => !isVisible(f));
 
     const render = (list) => list.length === 0
       ? '<div class="empty"><div class="icon">✈️</div>Cap vol en aquest moment</div>'
