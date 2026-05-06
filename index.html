@@ -312,11 +312,16 @@
       .section { max-width: 1440px; margin-left: auto; margin-right: auto; padding: 32px 48px 0; }
       .section-label { font-size: 11px; margin-bottom: 16px; }
 
-      #visible-container, #upcoming-container {
+      #upcoming-container {
         display: grid; grid-template-columns: repeat(2, 1fr);
         gap: 14px; align-items: stretch;
       }
-      #visible-container { min-height: 200px; }
+      /* Visible section: always full-width cards (featured zone) */
+      #visible-container {
+        display: grid; grid-template-columns: 1fr;
+        gap: 14px; align-items: stretch;
+        min-height: 200px;
+      }
       #visible-container .empty, #upcoming-container .empty,
       #visible-container .error-msg, #upcoming-container .error-msg {
         grid-column: 1 / -1;
@@ -344,7 +349,7 @@
       .footer    { max-width: 1440px; margin: 0 auto; font-size: 11px; padding: 16px 48px 0; text-align: left; }
     }
     @media (min-width: 1280px) {
-      #visible-container, #upcoming-container { grid-template-columns: repeat(3, 1fr); }
+      #upcoming-container { grid-template-columns: repeat(3, 1fr); }
     }
   </style>
 </head>
@@ -778,6 +783,16 @@ function tickEtaBadges() {
       el.textContent = '👁 ARA';
       el.className = 'badge visible-now';
       el.removeAttribute('data-eta');   // stop ticking
+
+      // Move the card to the visible section immediately — don't wait for next refresh
+      const card = el.closest('.card');
+      if (card && card.closest('#upcoming-container')) {
+        card.classList.add('now');
+        const vc = document.getElementById('visible-container');
+        // Remove the "no flights" placeholder if present
+        vc.querySelector('.empty')?.remove();
+        vc.appendChild(card);
+      }
     } else {
       el.textContent = `en ${fmtEta(remaining)}`;
     }
