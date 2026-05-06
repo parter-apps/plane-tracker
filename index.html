@@ -639,13 +639,13 @@ function buildCard(f, route, photo) {
   const routeHtml = route?.origin
     ? `<div class="route">
         <div class="apt">
-          <div class="apt-code">${route.origin}</div>
-          <div class="apt-name">${route.originName || ''}</div>
+          <div class="apt-code">${route.originName || route.origin}</div>
+          <div class="apt-name">${route.originName ? route.origin : ''}</div>
         </div>
         <div class="route-arrow">→</div>
         <div class="apt dest">
-          <div class="apt-code">BCN</div>
-          <div class="apt-name">Barcelona</div>
+          <div class="apt-code">Barcelona</div>
+          <div class="apt-name">BCN</div>
         </div>
       </div>`
     : `<div class="callsign">${f.callsign}</div>`;
