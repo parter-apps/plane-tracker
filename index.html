@@ -692,18 +692,26 @@ async function refresh() {
     // Pre-compute zone→BCN distance once (used for exit detection)
     const ZONE_TO_BCN_M = haversineM(ZONE.lat, ZONE.lon, BCN.lat, BCN.lon);
 
-    // Compute ETA to zone and ground speed (m/s) for each
+    // Compute ETA to zone, ground speed (m/s), and dist-to-BCN for each
     const withEta = candidates.map(f => {
-      const distM  = haversineM(f.lat, f.lon, ZONE.lat, ZONE.lon);
-      const gsMs   = (f.velocity || 120) * 0.514444;
+      const distM     = haversineM(f.lat, f.lon, ZONE.lat, ZONE.lon);
+      const distToBCN = haversineM(f.lat, f.lon, BCN.lat, BCN.lon);
+      const gsMs      = (f.velocity || 120) * 0.514444;
       const remaining = Math.max(0, distM - ZONE_RADIUS_M);
-      const eta    = remaining / gsMs;
-      return { ...f, distM, eta, gsMs };
+      const eta       = remaining / gsMs;
+      return { ...f, distM, distToBCN, eta, gsMs };
     });
 
-    // Keep descending planes within 5-min window (plus early-appear buffer)
+    // ── Key insight: after passing through the zone toward the runway,
+    // distM grows again (plane is now west of zone), giving a false positive ETA.
+    // Guard: if the plane is already closer to BCN than the zone's BCN-facing edge,
+    // it has passed through — exclude it entirely.
+    // Also apply VISIBLE_EARLY_S buffer: disappear 2s before the exit edge.
+    const exitEdge = ZONE_TO_BCN_M - ZONE_RADIUS_M + (150 * VISIBLE_EARLY_S); // ~300m buffer
     const approaching = withEta.filter(f =>
-      f.eta <= MAX_ETA_S && (f.vertRate == null || f.vertRate < 300)
+      f.distToBCN > exitEdge &&                        // not yet past the zone
+      f.eta <= MAX_ETA_S &&                            // within 5-min window
+      (f.vertRate == null || f.vertRate < 300)         // not climbing (departing)
     ).sort((a, b) => a.eta - b.eta);
 
     // Fetch route + photo in parallel
@@ -718,23 +726,9 @@ async function refresh() {
       photoMap.set(f.icao24, photo);
     }));
 
-    // ── Visible window with ±2s adjustment ───────────────────────
-    // Appear early:   eta <= VISIBLE_EARLY_S  (plane not yet in zone but close)
-    // Disappear early: once the plane is VISIBLE_EARLY_S * speed past the zone
-    //                  toward BCN it leaves the visible list.
-    const isVisible = f => {
-      if (f.eta > VISIBLE_EARLY_S) return false;   // still too far
-      // Detect planes that have passed the zone heading to runway:
-      // distToBCN < ZONE_TO_BCN_M means plane is closer to BCN than our zone.
-      // We disappear it when it is more than (gsMs * VISIBLE_EARLY_S) past the zone.
-      const distToBCN = haversineM(f.lat, f.lon, BCN.lat, BCN.lon);
-      const msPastZone = ZONE_TO_BCN_M - distToBCN;   // positive = past the zone
-      if (msPastZone > f.gsMs * VISIBLE_EARLY_S) return false;
-      return true;
-    };
-
-    const visible  = approaching.filter(f =>  isVisible(f));
-    const upcoming = approaching.filter(f => !isVisible(f));
+    // Visible = within zone + VISIBLE_EARLY_S early-appear window
+    const visible  = approaching.filter(f => f.eta <= VISIBLE_EARLY_S);
+    const upcoming = approaching.filter(f => f.eta >  VISIBLE_EARLY_S);
 
     const render = (list) => list.length === 0
       ? '<div class="empty"><div class="icon">✈️</div>Cap vol en aquest moment</div>'
