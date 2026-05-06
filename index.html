@@ -293,6 +293,16 @@
       text-align: center; margin-bottom: 10px;
     }
 
+    /* Error toast — transient, doesn't replace card content */
+    #error-toast {
+      display: none;
+      margin: 8px 16px 0;
+      padding: 10px 16px;
+      background: var(--err-bg); border: 1px solid var(--err-border);
+      border-radius: 12px; color: var(--err-color);
+      font-size: 13px; text-align: center;
+    }
+
     /* Footer */
     .footer   { text-align: center; font-size: 10px; color: var(--footer-color); padding: 20px 16px 0; }
     .countdown{ font-size: 11px; color: var(--text-muted); text-align: center; padding: 10px; }
@@ -309,6 +319,7 @@
       .header-left .sub{ font-size: 13px; margin-top: 4px; }
 
       .runway-banner { max-width: 1440px; margin: 20px auto 0; border-radius: 16px; }
+      #error-toast { max-width: 1440px; margin: 8px auto 0; }
       .section { max-width: 1440px; margin-left: auto; margin-right: auto; padding: 32px 48px 0; }
       .section-label { font-size: 11px; margin-bottom: 16px; }
 
@@ -758,12 +769,32 @@ async function refresh() {
 
     dot.className = 'live-dot active';
     fetchedAt = Date.now();
+    hideErrorToast();
   } catch(e) {
     dot.className = 'live-dot error';
-    document.getElementById('visible-container').innerHTML =
-      `<div class="error-msg">⚠️ Error: ${e.message}</div>`;
+    showErrorToast(e.message);
+    // Retry in 5s on transient errors (5xx / network) instead of waiting the full 8s
+    setTimeout(() => { if (dot.className.includes('error')) refresh(); }, 5000);
   }
   updateCountdown();
+}
+
+let errorToastTimer = null;
+function showErrorToast(msg) {
+  let toast = document.getElementById('error-toast');
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.id = 'error-toast';
+    document.querySelector('.runway-banner').insertAdjacentElement('afterend', toast);
+  }
+  toast.textContent = `⚠️ ${msg} — tornant a intentar…`;
+  toast.style.display = 'block';
+  clearTimeout(errorToastTimer);
+  errorToastTimer = setTimeout(hideErrorToast, 12000);
+}
+function hideErrorToast() {
+  const t = document.getElementById('error-toast');
+  if (t) t.style.display = 'none';
 }
 
 function updateCountdown() {
