@@ -697,9 +697,14 @@ function renderRunwayBanner(info) {
 }
 
 // ── Main refresh loop ─────────────────────────────────────────────
-let fetchedAt = 0;
+let fetchedAt  = 0;
+let refreshing = false;   // concurrency guard
+let retryTimer = null;    // single pending retry handle
 
 async function refresh() {
+  if (refreshing) return;          // already in-flight, skip
+  refreshing = true;
+  clearTimeout(retryTimer);        // cancel any pending retry
   const dot = document.getElementById('live-dot');
   try {
     const [runwayInfo, states] = await Promise.all([
@@ -775,11 +780,25 @@ async function refresh() {
   } catch(e) {
     dot.className = 'live-dot error';
     showErrorToast(e.message);
-    // Retry in 5s on transient errors (5xx / network) instead of waiting the full 8s
-    setTimeout(() => { if (dot.className.includes('error')) refresh(); }, 5000);
+    // Retry once in 5s (single attempt — the 8s interval takes over after that)
+    retryTimer = setTimeout(() => { refreshing = false; refresh(); }, 5000);
+    refreshing = false;  // allow the retry to run
+    updateCountdown();
+    return;
   }
+  refreshing = false;
   updateCountdown();
 }
+
+// ── Staleness watchdog — clear visible cards if data is > 25s old ─
+setInterval(() => {
+  if (fetchedAt > 0 && Date.now() - fetchedAt > 25000) {
+    const vc = document.getElementById('visible-container');
+    if (vc.querySelector('.card')) {
+      vc.innerHTML = '<div class="empty"><div class="icon">✈️</div>Cap vol en aquest moment</div>';
+    }
+  }
+}, 5000);
 
 let errorToastTimer = null;
 function showErrorToast(msg) {
