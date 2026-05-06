@@ -757,9 +757,10 @@ async function refresh() {
       photoMap.set(f.icao24, photo);
     }));
 
-    // Visible = within zone + VISIBLE_EARLY_S early-appear window
-    const visible  = approaching.filter(f => f.eta <= VISIBLE_EARLY_S);
-    const upcoming = approaching.filter(f => f.eta >  VISIBLE_EARLY_S);
+    // Visible = only the single closest plane in the zone (one plane at a time from the window)
+    const inZone   = approaching.filter(f => f.eta <= VISIBLE_EARLY_S);
+    const visible  = inZone.slice(0, 1);
+    const upcoming = [...inZone.slice(1), ...approaching.filter(f => f.eta > VISIBLE_EARLY_S)];
 
     const render = (list) => list.length === 0
       ? '<div class="empty"><div class="icon">✈️</div>Cap vol en aquest moment</div>'
@@ -816,14 +817,16 @@ function tickEtaBadges() {
       el.className = 'badge visible-now';
       el.removeAttribute('data-eta');   // stop ticking
 
-      // Move the card to the visible section immediately — don't wait for next refresh
+      // Move the card to visible immediately — but only if no plane is already visible
       const card = el.closest('.card');
       if (card && card.closest('#upcoming-container')) {
-        card.classList.add('now');
         const vc = document.getElementById('visible-container');
-        // Remove the "no flights" placeholder if present
-        vc.querySelector('.empty')?.remove();
-        vc.appendChild(card);
+        const alreadyVisible = vc.querySelector('.card');
+        if (!alreadyVisible) {
+          card.classList.add('now');
+          vc.querySelector('.empty')?.remove();
+          vc.appendChild(card);
+        }
       }
     } else {
       el.textContent = `en ${fmtEta(remaining)}`;
