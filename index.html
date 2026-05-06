@@ -274,8 +274,18 @@
       background: var(--empty-bg);
       border-radius: 18px;
       border: 1px dashed var(--empty-border);
+      /* Stretch to fill the container's min-height */
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      min-height: 160px;
     }
     .empty .icon { font-size: 28px; margin-bottom: 8px; }
+
+    /* Visible section always reserves prominent space */
+    #visible-container {
+      min-height: 170px;
+      display: flex; flex-direction: column;
+    }
     .error-msg {
       background: var(--err-bg); border: 1px solid var(--err-border);
       border-radius: 14px; padding: 16px;
@@ -306,8 +316,12 @@
         display: grid; grid-template-columns: repeat(2, 1fr);
         gap: 14px; align-items: stretch;
       }
+      #visible-container { min-height: 200px; }
       #visible-container .empty, #upcoming-container .empty,
-      #visible-container .error-msg, #upcoming-container .error-msg { grid-column: 1 / -1; }
+      #visible-container .error-msg, #upcoming-container .error-msg {
+        grid-column: 1 / -1;
+        min-height: 160px;
+      }
 
       .card { margin-bottom: 0; border-radius: 20px; padding: 20px; transition: background 0.15s, border-color 0.15s, transform 0.15s, box-shadow 0.15s; display: flex; flex-direction: column; }
       .card .stats { margin-top: auto; }
