@@ -227,6 +227,7 @@ const AIRPORTS = {
   LGZA:{ iata:'ZTH', city:'Zakynthos',         lat:37.751,  lon:20.884  },
 
   // Iberia
+  LEBL:{ iata:'BCN', city:'Barcelona',         lat:41.297,  lon:2.083   },
   LEMD:{ iata:'MAD', city:'Madrid',            lat:40.472,  lon:-3.561  },
   LEPA:{ iata:'PMI', city:'Palma',             lat:39.552,  lon:2.739   },
   GCLP:{ iata:'LPA', city:'Las Palmas',        lat:27.932,  lon:-15.387 },
