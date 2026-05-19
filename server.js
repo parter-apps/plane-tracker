@@ -11,9 +11,23 @@ const RADIUS_NM = 40;
 // ── ADS-B source: adsb.lol — real-time, same format as adsb.one ──────
 const ADSB_URL = `https://api.adsb.lol/v2/point/${ZONE_LAT}/${ZONE_LON}/${RADIUS_NM}`;
 
+function fetchJsonUA(url, ua) {
+  return new Promise((resolve, reject) => {
+    https.get(url, { headers: { 'User-Agent': ua } }, res => {
+      let raw = '';
+      res.on('data', c => raw += c);
+      res.on('end', () => {
+        if (res.statusCode === 403) { reject(new Error(`403 from ${url}`)); return; }
+        try { resolve(JSON.parse(raw)); }
+        catch(e) { reject(new Error('Bad JSON from upstream')); }
+      });
+    }).on('error', reject);
+  });
+}
+
 function fetchJson(url) {
   return new Promise((resolve, reject) => {
-    https.get(url, { headers: { 'User-Agent': 'BCNWindowTracker/1.0' } }, res => {
+    https.get(url, { headers: { 'User-Agent': 'BCNWindowTracker/1.0 (+https://github.com/parter-apps/plane-tracker)' } }, res => {
       let raw = '';
       res.on('data', c => raw += c);
       res.on('end', () => {
@@ -66,7 +80,10 @@ async function lookupPhoto(hex) {
   const key = hex.toLowerCase();
   if (photoCache.has(key)) return photoCache.get(key);
   try {
-    const data = await fetchJson(`https://api.planespotters.net/pub/photos/hex/${key}`);
+    const data = await fetchJsonUA(
+      `https://api.planespotters.net/pub/photos/hex/${key}`,
+      'BCNWindowTracker/1.0 (+https://github.com/parter-apps/plane-tracker)'
+    );
     const p = data?.photos?.[0] ?? null;
     const result = p ? {
       url:          p.thumbnail_large?.src || p.thumbnail?.src || null,
